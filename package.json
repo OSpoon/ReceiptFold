@@ -1,7 +1,7 @@
 {
   "name": "receipt-fold",
   "productName": "发票夹",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A private, on-device invoice library",
   "main": "./out/main/index.js",
   "author": "OSpoon",
@@ -33,10 +33,10 @@
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
     "build:linux": "npm run build && electron-builder --linux",
-    "release": "bumpp --tag \"{tag}\" --commit \"chore: release {tag}\"",
-    "release:patch": "bumpp --release patch --tag \"{tag}\" --commit \"chore: release {tag}\"",
-    "release:minor": "bumpp --release minor --tag \"{tag}\" --commit \"chore: release {tag}\"",
-    "release:major": "bumpp --release major --tag \"{tag}\" --commit \"chore: release {tag}\""
+    "release": "bumpp --tag \"v{version}\" --commit \"chore: release v{version}\"",
+    "release:patch": "bumpp --release patch --tag \"v{version}\" --commit \"chore: release v{version}\"",
+    "release:minor": "bumpp --release minor --tag \"v{version}\" --commit \"chore: release v{version}\"",
+    "release:major": "bumpp --release major --tag \"v{version}\" --commit \"chore: release v{version}\""
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
