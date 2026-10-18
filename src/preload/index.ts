@@ -5,6 +5,7 @@ const api: InvoiceApi = {
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   checkForUpdates: () => ipcRenderer.invoke('app:update-check'),
   installUpdate: () => ipcRenderer.invoke('app:update-install'),
+  openReleasePage: () => ipcRenderer.invoke('app:open-releases'),
   onUpdateStatus: (listener: (status: UpdateStatus) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, status: UpdateStatus): void => listener(status)
     ipcRenderer.on('app:update-status', handler)

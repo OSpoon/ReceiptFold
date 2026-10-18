@@ -41,6 +41,8 @@
 
 发布页面提供 macOS、Windows 和 Linux 的构建包。若页面还没有版本资产，表示首个安装包尚未发布。
 
+目前 macOS 安装包未使用 Apple Developer ID 签名且未经公证，首次打开时 macOS 可能会拦截。请只从本项目的 [GitHub Releases](https://github.com/OSpoon/ReceiptFold/releases/latest) 下载；如果系统阻止打开，可在尝试打开后前往“系统设置 → 隐私与安全性”，在安全性区域选择“仍要打开”。详见 [Apple 关于安全打开 Mac App 的说明](https://support.apple.com/zh-cn/102445)。macOS 未签名版本不支持应用内更新，请从 Releases 手动下载后续版本。Windows 版本仍可在应用内检查更新。
+
 ## 开发与构建
 
 需要 Node.js 24 或更高版本。
@@ -59,6 +61,8 @@ npm run build:linux
 ```
 
 项目基于 Electron、Vue 3、TypeScript、electron-vite 和 shadcn-vue 风格组件构建；本地发票数据使用 SQLite 保存，OCR 由 [RapidOCRNode](https://github.com/OSpoon/RapidOCRNode) 提供。
+
+维护者可参阅[发布流程](docs/releasing.md)。
 
 ## 许可证
 

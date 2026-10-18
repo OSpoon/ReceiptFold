@@ -430,6 +430,7 @@ function registerHandlers(): void {
   handleIpc('app:info', (): AppInfo => ({ version: app.getVersion(), packaged: app.isPackaged, updateStatus: getUpdateStatus() }))
   handleIpc('app:update-check', () => checkForUpdates())
   handleIpc('app:update-install', () => installDownloadedUpdate())
+  handleIpc('app:open-releases', () => shell.openExternal('https://github.com/OSpoon/ReceiptFold/releases/latest'))
   handleIpc('invoice:list', () => readInvoices())
   handleIpc('invoice:import', (event) => {
     const window = BrowserWindow.fromWebContents(event.sender)

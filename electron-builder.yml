@@ -25,6 +25,8 @@ nsis:
   createDesktopShortcut: always
 mac:
   icon: build/icon.icns
+  identity: null
+  hardenedRuntime: false
   target:
     - dmg
     - zip
@@ -32,7 +34,7 @@ mac:
   extendInfo:
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
-  notarize: true
+  notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:

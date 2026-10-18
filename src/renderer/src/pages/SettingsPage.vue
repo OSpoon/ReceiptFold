@@ -22,7 +22,7 @@ const {
   switchOcrModel,
   openLocalFolder
 } = useOcrSettings()
-const { appInfo, updateStatus, updateStatusDescription, updateButtonDisabled, updateButtonLabel, handleUpdateButton } = useAppUpdates()
+const { appInfo, updateStatus, updateStatusDescription, updateButtonDisabled, updateButtonLabel, handleUpdateButton, openReleasePage } = useAppUpdates()
 const { themeMode, themeOptions, setThemeMode } = useTheme()
 </script>
 
@@ -110,7 +110,11 @@ const { themeMode, themeOptions, setThemeMode } = useTheme()
             <strong>发票夹 <span>v{{ appInfo?.version ?? '…' }}</span></strong>
             <span>{{ appInfo?.packaged ? updateStatusDescription : '开发版本无法接收自动更新。' }}</span>
           </div>
-          <Button v-if="appInfo?.packaged" variant="outline" class="settings-update-button" :disabled="updateButtonDisabled" aria-live="polite" @click="handleUpdateButton">
+          <Button v-if="appInfo?.packaged && updateStatus.phase === 'manual-only'" variant="outline" class="settings-update-button" @click="openReleasePage">
+            <Download :size="14" />
+            下载新版本
+          </Button>
+          <Button v-else-if="appInfo?.packaged" variant="outline" class="settings-update-button" :disabled="updateButtonDisabled" aria-live="polite" @click="handleUpdateButton">
             <RefreshCw :size="14" :class="{ 'update-spinning': updateStatus.phase === 'checking' || updateStatus.phase === 'downloading' }" />
             {{ updateButtonLabel }}
           </Button>

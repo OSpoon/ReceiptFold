@@ -33,9 +33,10 @@
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
     "build:linux": "npm run build && electron-builder --linux",
-    "release:patch": "npm version patch",
-    "release:minor": "npm version minor",
-    "release:major": "npm version major"
+    "release": "bumpp --tag \"{tag}\" --commit \"chore: release {tag}\"",
+    "release:patch": "bumpp --release patch --tag \"{tag}\" --commit \"chore: release {tag}\"",
+    "release:minor": "bumpp --release minor --tag \"{tag}\" --commit \"chore: release {tag}\"",
+    "release:major": "bumpp --release major --tag \"{tag}\" --commit \"chore: release {tag}\""
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
@@ -63,6 +64,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.19.2",
     "@vitejs/plugin-vue": "^6.0.10",
+    "bumpp": "12.3.0",
     "electron": "^44.7.2",
     "electron-builder": "^26.15.3",
     "electron-vite": "^6.0.0",

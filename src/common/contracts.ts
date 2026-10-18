@@ -149,6 +149,7 @@ export interface AppInfo {
 
 export type UpdateStatus =
   | { phase: 'idle' }
+  | { phase: 'manual-only' }
   | { phase: 'checking' }
   | { phase: 'available'; version: string }
   | { phase: 'not-available'; version: string }
@@ -160,6 +161,7 @@ export interface InvoiceApi {
   getAppInfo: () => Promise<AppInfo>
   checkForUpdates: () => Promise<void>
   installUpdate: () => Promise<void>
+  openReleasePage: () => Promise<void>
   onUpdateStatus: (listener: (status: UpdateStatus) => void) => () => void
   list: () => Promise<Invoice[]>
   importFiles: () => Promise<ImportResult | null>

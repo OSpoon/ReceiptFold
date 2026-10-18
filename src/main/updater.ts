@@ -15,13 +15,13 @@ function publish(nextStatus: UpdateStatus): void {
 }
 
 export function getUpdateStatus(): UpdateStatus {
-  return status
+  return process.platform === 'darwin' ? { phase: 'manual-only' } : status
 }
 
 export function setupUpdater(): void {
   if (initialized) return
   initialized = true
-  if (!app.isPackaged) return
+  if (!app.isPackaged || process.platform === 'darwin') return
 
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
@@ -35,16 +35,16 @@ export function setupUpdater(): void {
 }
 
 export function checkForUpdates(): void {
-  if (!app.isPackaged) return
+  if (!app.isPackaged || process.platform === 'darwin') return
   void autoUpdater.checkForUpdates().catch(() => publish({ phase: 'error' }))
 }
 
 export function checkForUpdatesOnStartup(): void {
-  if (!app.isPackaged || startupCheckStarted) return
+  if (!app.isPackaged || process.platform === 'darwin' || startupCheckStarted) return
   startupCheckStarted = true
   checkForUpdates()
 }
 
 export function installDownloadedUpdate(): void {
-  if (app.isPackaged && status.phase === 'downloaded') autoUpdater.quitAndInstall(false, true)
+  if (app.isPackaged && process.platform !== 'darwin' && status.phase === 'downloaded') autoUpdater.quitAndInstall(false, true)
 }
