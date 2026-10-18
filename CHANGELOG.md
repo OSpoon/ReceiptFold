@@ -6,5 +6,5 @@
 
 - 首个本地发票库版本。
 - 支持发票图片导入、RapidOCRNode 识别、票面信息校正和 CSV 导出。
-- 配置多平台安装包与 GitHub 草稿发行版；macOS 生成未签名、未公证的 DMG 和 ZIP，并使用手动下载更新。
+- 配置多平台安装包与 GitHub 草稿发行版；macOS 生成未使用 Apple Developer ID 签名、未经公证的 DMG 和 ZIP，并使用手动下载更新。
 - Windows 保留应用内更新流程。

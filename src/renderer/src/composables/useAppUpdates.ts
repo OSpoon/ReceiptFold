@@ -18,7 +18,7 @@ const updateButtonLabel = computed(() => {
 const updateButtonDisabled = computed(() => ['checking', 'available', 'downloading'].includes(updateStatus.value.phase))
 const updateStatusDescription = computed(() => {
   switch (updateStatus.value.phase) {
-    case 'manual-only': return '此 macOS 版本未签名，暂不支持应用内更新。请前往 GitHub Releases 下载新版本。'
+    case 'manual-only': return '此 macOS 版本未使用 Apple Developer ID 签名，暂不支持应用内更新。请前往 GitHub Releases 下载新版本。'
     case 'checking': return '正在检查是否有可用更新。'
     case 'available': return `发现新版本 v${updateStatus.value.version}，正在准备下载。`
     case 'downloading': return `正在下载更新，已完成 ${updateStatus.value.percent}%。`

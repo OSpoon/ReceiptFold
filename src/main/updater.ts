@@ -15,6 +15,7 @@ function publish(nextStatus: UpdateStatus): void {
 }
 
 export function getUpdateStatus(): UpdateStatus {
+  // macOS releases are intentionally unsigned and cannot use electron-updater.
   return process.platform === 'darwin' ? { phase: 'manual-only' } : status
 }
 

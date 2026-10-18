@@ -14,12 +14,12 @@ concurrency:
 
 jobs:
   prepare-release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Check tag and app version
@@ -27,18 +27,18 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           node -e "const pkg = require('./package.json'); const tag = process.env.RELEASE_TAG; if (!new RegExp('^v[0-9]+[.][0-9]+[.][0-9]+$').test(tag) || tag !== 'v' + pkg.version) { console.error('Use a stable vMAJOR.MINOR.PATCH tag matching package.json (' + pkg.version + ').'); process.exit(1) }"
-      - name: Create draft release
+      - name: Generate structured release notes
+        run: npx --yes changelogithub@15.0.5 --draft --name "发票夹 ${GITHUB_REF_NAME}"
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Ensure draft release exists
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --title "发票夹 $GITHUB_REF_NAME" --generate-notes
           fi
-      - name: Generate structured release notes
-        run: npx --yes changelogithub@15.0.5 --draft --name "发票夹 ${GITHUB_REF_NAME}"
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
 
   package:
     needs: prepare-release
@@ -50,28 +50,39 @@ jobs:
             platform: mac
           - runner: windows-latest
             platform: win
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             platform: linux
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run ci
-      - name: Package and publish unsigned macOS assets
+      - name: Package unsigned macOS assets
         if: matrix.platform == 'mac'
-        run: npx electron-builder --${{ matrix.platform }} --publish always
+        run: npx electron-builder --${{ matrix.platform }} --publish never
         env:
-          GH_TOKEN: ${{ github.token }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
-      - name: Package and publish Windows and Linux assets
+      - name: Package Windows and Linux assets
         if: matrix.platform != 'mac'
-        run: npx electron-builder --${{ matrix.platform }} --publish always
+        run: npx electron-builder --${{ matrix.platform }} --publish never
         env:
-          GH_TOKEN: ${{ github.token }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      - name: Upload assets to the draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          files=(dist/*.dmg dist/*.zip dist/*.AppImage dist/*.deb dist/*.exe dist/latest*.yml dist/*.blockmap)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::No release assets were generated."
+            exit 1
+          fi
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
