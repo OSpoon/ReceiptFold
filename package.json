@@ -1,7 +1,7 @@
 {
   "name": "receipt-fold",
   "productName": "发票夹",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A private, on-device invoice library",
   "main": "./out/main/index.js",
   "author": "OSpoon",
