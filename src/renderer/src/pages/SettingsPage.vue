@@ -3,6 +3,7 @@ import { Download, FolderOpen, LockKeyhole, RefreshCw, Sparkles } from '@lucide/
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { useAppUpdates } from '@/composables/useAppUpdates'
 import { fileSize } from '@/composables/useFormatters'
 import { useInvoiceLibrary } from '@/composables/useInvoiceLibrary'
@@ -16,13 +17,15 @@ const {
   ocrSettingsError,
   selectedOcrModel,
   isSwitchingOcrModel,
+  isSwitchingStructuredExtraction,
   currentOcrModel,
   ocrModelPresets,
   refreshOcrSettings,
   switchOcrModel,
+  switchStructuredExtraction,
   openLocalFolder
 } = useOcrSettings()
-const { appInfo, updateStatus, updateStatusDescription, updateButtonDisabled, updateButtonLabel, handleUpdateButton, openReleasePage } = useAppUpdates()
+const { appInfo, updateStatus, updateStatusDescription, updateButtonDisabled, updateButtonLabel, handleUpdateButton } = useAppUpdates()
 const { themeMode, themeOptions, setThemeMode } = useTheme()
 </script>
 
@@ -49,7 +52,7 @@ const { themeMode, themeOptions, setThemeMode } = useTheme()
             <span>识别规格</span>
             <Select
               :model-value="selectedOcrModel"
-              :disabled="!ocrSettings || isSwitchingOcrModel || isImporting || isImportRequestActive"
+              :disabled="!ocrSettings || isSwitchingOcrModel || isSwitchingStructuredExtraction || isImporting || isImportRequestActive"
               @update:model-value="switchOcrModel"
             >
               <SelectTrigger aria-label="识别模型规格"><SelectValue /></SelectTrigger>
@@ -59,8 +62,20 @@ const { themeMode, themeOptions, setThemeMode } = useTheme()
             </Select>
           </label>
         </div>
+        <div class="structured-extraction-row">
+          <div class="structured-extraction-copy">
+            <strong>结构化票据字段</strong>
+            <span>使用本地 Qwen3-0.6B 模型从 OCR 文本中定位票面字段；模型与 OCR 模型存放在同一文件夹。模型不可用时回退基础解析。</span>
+          </div>
+          <Switch
+            :model-value="ocrSettings?.structuredExtractionEnabled ?? false"
+            :disabled="!ocrSettings || isSwitchingOcrModel || isSwitchingStructuredExtraction || isImporting || isImportRequestActive"
+            aria-label="启用结构化票据字段识别"
+            @update:model-value="switchStructuredExtraction"
+          />
+        </div>
         <div class="settings-note settings-note-with-action">
-          <span class="settings-note-copy"><Download :size="15" /><span aria-live="polite">{{ isSwitchingOcrModel ? '正在切换模型…' : isImporting || isImportRequestActive ? '识别结束后可切换模型。' : '未缓存的规格会在首次识别时下载。' }}</span></span>
+          <span class="settings-note-copy"><Download :size="15" /><span aria-live="polite">{{ isSwitchingOcrModel || isSwitchingStructuredExtraction ? '正在更新模型设置…' : isImporting || isImportRequestActive ? '识别结束后可切换模型。' : '未缓存的模型会在首次识别时下载。模型缓存占用包含结构化字段模型。' }}</span></span>
           <Button variant="outline" size="sm" class="folder-action-button" @click="openLocalFolder('models')"><FolderOpen :size="13" />打开模型文件夹</Button>
         </div>
       </Card>
@@ -102,7 +117,7 @@ const { themeMode, themeOptions, setThemeMode } = useTheme()
     </section>
 
     <section class="settings-group">
-      <div class="settings-group-heading"><div><h2>应用更新</h2><p>查看当前版本并检查更新。</p></div></div>
+      <div class="settings-group-heading"><div><h2>应用更新</h2><p>{{ appInfo?.packaged && appInfo.updateMode === 'manual' ? '检查 GitHub Releases 并手动下载新版本。' : '查看当前版本并检查更新。' }}</p></div></div>
       <Card class="settings-card">
         <div class="setting-row update-setting-row">
           <div class="setting-product-icon"><RefreshCw :size="17" /></div>
@@ -110,12 +125,9 @@ const { themeMode, themeOptions, setThemeMode } = useTheme()
             <strong>发票夹 <span>v{{ appInfo?.version ?? '…' }}</span></strong>
             <span>{{ appInfo?.packaged ? updateStatusDescription : '开发版本无法接收自动更新。' }}</span>
           </div>
-          <Button v-if="appInfo?.packaged && updateStatus.phase === 'manual-only'" variant="outline" class="settings-update-button" @click="openReleasePage">
-            <Download :size="14" />
-            下载新版本
-          </Button>
-          <Button v-else-if="appInfo?.packaged" variant="outline" class="settings-update-button" :disabled="updateButtonDisabled" aria-live="polite" @click="handleUpdateButton">
-            <RefreshCw :size="14" :class="{ 'update-spinning': updateStatus.phase === 'checking' || updateStatus.phase === 'downloading' }" />
+          <Button v-if="appInfo?.packaged" variant="outline" class="settings-update-button" :disabled="updateButtonDisabled" aria-live="polite" @click="handleUpdateButton">
+            <Download v-if="appInfo.updateMode === 'manual' && ['available', 'error'].includes(updateStatus.phase)" :size="14" />
+            <RefreshCw v-else :size="14" :class="{ 'update-spinning': updateStatus.phase === 'checking' || updateStatus.phase === 'downloading' }" />
             {{ updateButtonLabel }}
           </Button>
           <span v-else class="development-badge">开发版本</span>

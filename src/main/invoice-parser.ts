@@ -37,6 +37,39 @@ const lineItemHeaderPatterns: Array<[keyof InvoiceLineItem, RegExp]> = [
   ['taxAmount', /税额/]
 ]
 
+export const structuredInvoiceFieldDescriptions = {
+  invoiceType: '发票类型或票面标题',
+  invoiceNumber: '发票号码，不是发票代码',
+  issueDate: '开票日期或开具日期',
+  invoiceCode: '发票代码',
+  machineNumber: '机器编号或税控盘编号',
+  checkCode: '校验码',
+  buyerName: '购买方名称',
+  buyerTaxId: '购买方统一社会信用代码或纳税人识别号',
+  buyerAddress: '购买方地址',
+  buyerPhone: '购买方电话',
+  buyerBankName: '购买方开户行',
+  buyerBankAccount: '购买方银行账号',
+  sellerName: '销售方或开票方名称',
+  sellerTaxId: '销售方统一社会信用代码或纳税人识别号',
+  sellerAddress: '销售方地址',
+  sellerPhone: '销售方电话',
+  sellerBankName: '销售方开户行',
+  sellerBankAccount: '销售方银行账号',
+  amountExcludingTax: '合计金额或不含税金额',
+  taxAmount: '合计税额，不是税率',
+  totalAmount: '价税合计小写金额',
+  amountInWords: '价税合计大写金额',
+  remarks: '票面备注',
+  payee: '收款人',
+  reviewer: '复核人',
+  issuer: '开票人'
+} as const
+
+export type StructuredInvoiceFields = Partial<{
+  [Key in keyof typeof structuredInvoiceFieldDescriptions]: string | null
+}>
+
 function cleanField(value: string | undefined): string {
   return (value ?? '').replace(/^[\s:：,，。;；]+|[\s,，。;；]+$/g, '').trim()
 }
@@ -77,8 +110,7 @@ function findLabeledValue(text: string, label: RegExp): string {
   return ''
 }
 
-function extractDate(text: string): string {
-  const value = findLabeledValue(text, /开票日期?|开具日期?/)
+function normalizeDateValue(value: string): string {
   const match = value.match(/(?:^|[^\d])((?:19|20)\d{2})\s*(?:年|[./-]|\s)\s*(\d{1,2})\s*(?:月|[./-]|\s)\s*(\d{1,2})\s*日?(?:$|[^\d])/)?.slice(1)
     ?? value.match(/(?:^|[^\d])((?:19|20)\d{2})(\d{2})(\d{2})(?:$|[^\d])/i)?.slice(1)
   if (!match) return ''
@@ -89,12 +121,22 @@ function extractDate(text: string): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-function extractInvoiceNumber(text: string): string {
-  const value = findLabeledValue(text, /发票号码|发票号/)
-  return value.match(/(?:^|[^0-9A-Za-z])([0-9A-Za-z]{8,24})(?:$|[^0-9A-Za-z])/)?.[1] ?? ''
+function extractDate(text: string, structuredValue?: string | null): string {
+  return normalizeDateValue(structuredValue ?? '') || normalizeDateValue(findLabeledValue(text, /开票日期?|开具日期?/))
 }
 
-function extractAmount(text: string): number {
+function extractInvoiceNumber(text: string, structuredValue?: string | null): string {
+  const pattern = /(?:^|[^0-9A-Za-z])([0-9A-Za-z]{8,24})(?:$|[^0-9A-Za-z])/
+  return structuredValue?.match(pattern)?.[1] ?? findLabeledValue(text, /发票号码|发票号/).match(pattern)?.[1] ?? ''
+}
+
+function parseAmount(value: string | null | undefined): number | undefined {
+  return toNumber(value ?? undefined)
+}
+
+function extractAmount(text: string, structuredValue?: string | null): number {
+  const structuredAmount = parseAmount(structuredValue)
+  if (structuredAmount !== undefined) return structuredAmount
   const labels = [/小写/, /价税合计/, /合计金额|应付金额|实付金额/]
   for (const label of labels) {
     const value = findLabeledValue(text, label)
@@ -118,7 +160,7 @@ function partySection(lines: string[], party: 'buyer' | 'seller'): string {
   return lines.slice(start, end).join('\n')
 }
 
-function extractParty(lines: string[], party: 'buyer' | 'seller', ocrLines: OcrLine[]): InvoicePartyDetails {
+function extractParty(lines: string[], party: 'buyer' | 'seller', ocrLines: OcrLine[], structuredFields: StructuredInvoiceFields): InvoicePartyDetails {
   const maxX = Math.max(...ocrLines.flatMap((line) => line.box.map((point) => point.x)), 0)
   const heading = ocrLines.find((line) => partyHeadings[party].test(line.text))
   const tableHeading = ocrLines.find((line) => /项目名称|货物或应税劳务|商品名称/.test(line.text))
@@ -159,6 +201,18 @@ function extractParty(lines: string[], party: 'buyer' | 'seller', ocrLines: OcrL
   result.phone = cleanField(result.phone)
   result.bankName = cleanField(result.bankName)
   result.bankAccount = cleanField(result.bankAccount)
+
+  const structuredParty = party === 'buyer' ? 'buyer' : 'seller'
+  const modelField = (field: string): string => cleanField(structuredFields[`${structuredParty}${field}` as keyof StructuredInvoiceFields] ?? '')
+  const modelTaxId = modelField('TaxId').match(/[0-9A-Z]{8,24}/i)?.[0]
+  const modelPhone = modelField('Phone').match(/(?:\+?86[-\s]?)?(?:1\d{10}|0\d{2,3}[-\s]?\d{7,8})/)?.[0]
+  const modelBankAccount = modelField('BankAccount').match(/(?:\d[ -]?){8,}/)?.[0]?.replace(/[ -]/g, '')
+  result.name = modelField('Name') || result.name
+  result.taxId = modelTaxId || result.taxId
+  result.address = modelField('Address') || result.address
+  result.phone = modelPhone || result.phone
+  result.bankName = modelField('BankName') || result.bankName
+  result.bankAccount = modelBankAccount || result.bankAccount
   return result
 }
 
@@ -332,7 +386,8 @@ export function parseOcr(
   lines: string[],
   scores: number[],
   ocrLines: OcrLine[] = [],
-  qrCodeText = ''
+  qrCodeText = '',
+  structuredFields: StructuredInvoiceFields = {}
 ): Pick<
   Invoice,
   | 'invoiceNumber'
@@ -350,27 +405,27 @@ export function parseOcr(
 > {
   const text = lines.join('\n')
   const confidence = scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0
-  const invoiceNumber = extractInvoiceNumber(text)
-  const date = extractDate(text)
-  const buyer = extractParty(lines, 'buyer', ocrLines)
-  const seller = extractParty(lines, 'seller', ocrLines)
-  const amount = extractAmount(text)
+  const invoiceNumber = extractInvoiceNumber(text, structuredFields.invoiceNumber)
+  const date = extractDate(text, structuredFields.issueDate)
+  const buyer = extractParty(lines, 'buyer', ocrLines, structuredFields)
+  const seller = extractParty(lines, 'seller', ocrLines, structuredFields)
+  const amount = extractAmount(text, structuredFields.totalAmount)
   const details: InvoiceDetails = emptyInvoiceDetails()
-  details.invoiceType = extractInvoiceType(lines)
-  details.invoiceCode = findLabeledValue(text, /发票代码\s*[:：]?/).match(/[0-9A-Za-z]{8,24}/)?.[0] ?? ''
-  details.machineNumber = findLabeledValue(text, /机器编号|税控盘编号|机器编号\s*[:：]?/)
-  details.checkCode = findLabeledValue(text, /校验码\s*[:：]?/)
+  details.invoiceType = cleanField(structuredFields.invoiceType ?? '') || extractInvoiceType(lines)
+  details.invoiceCode = structuredFields.invoiceCode?.match(/[0-9A-Za-z]{8,24}/)?.[0] ?? findLabeledValue(text, /发票代码\s*[:：]?/).match(/[0-9A-Za-z]{8,24}/)?.[0] ?? ''
+  details.machineNumber = cleanField(structuredFields.machineNumber ?? '') || findLabeledValue(text, /机器编号|税控盘编号|机器编号\s*[:：]?/)
+  details.checkCode = cleanField(structuredFields.checkCode ?? '') || findLabeledValue(text, /校验码\s*[:：]?/)
   details.buyer = buyer
   details.seller = seller
   details.items = extractLineItems(ocrLines)
   const totals = parseTotalAmounts(text, ocrLines, details.items)
-  details.amountExcludingTax = totals.excludingTax
-  details.taxAmount = totals.tax
-  details.amountInWords = extractAmountInWords(text)
-  details.remarks = extractRemarks(text)
-  details.payee = findLabeledValue(text, /收款人\s*[:：]?/)
-  details.reviewer = findLabeledValue(text, /复核人?\s*[:：]?/).replace(/^人\s*[:：]?\s*/, '')
-  details.issuer = findLabeledValue(text, /开票人\s*[:：]?/)
+  details.amountExcludingTax = parseAmount(structuredFields.amountExcludingTax)?.toFixed(2) ?? totals.excludingTax
+  details.taxAmount = parseAmount(structuredFields.taxAmount)?.toFixed(2) ?? totals.tax
+  details.amountInWords = cleanField(structuredFields.amountInWords ?? '') || extractAmountInWords(text)
+  details.remarks = cleanField(structuredFields.remarks ?? '') || extractRemarks(text)
+  details.payee = cleanField(structuredFields.payee ?? '') || findLabeledValue(text, /收款人\s*[:：]?/)
+  details.reviewer = cleanField(structuredFields.reviewer ?? '').replace(/^人\s*[:：]?\s*/, '') || findLabeledValue(text, /复核人?\s*[:：]?/).replace(/^人\s*[:：]?\s*/, '')
+  details.issuer = cleanField(structuredFields.issuer ?? '') || findLabeledValue(text, /开票人\s*[:：]?/)
   details.qrCodeText = qrCodeText
   details.extraFields = extractExtraFields(lines)
 

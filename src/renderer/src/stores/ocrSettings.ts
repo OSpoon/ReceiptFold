@@ -9,6 +9,7 @@ export const useOcrSettingsStore = defineStore('ocr-settings', () => {
   const ocrSettingsError = ref('')
   const selectedOcrModel = ref<OcrModelPreset>('small')
   const isSwitchingOcrModel = ref(false)
+  const isSwitchingStructuredExtraction = ref(false)
   const currentOcrModel = computed(() => ocrModelPresets.find((preset) => preset.value === ocrSettings.value?.modelPreset) ?? ocrModelPresets[1])
   let initializationStarted = false
 
@@ -45,7 +46,7 @@ export const useOcrSettingsStore = defineStore('ocr-settings', () => {
 
   async function switchOcrModel(value: string): Promise<void> {
     const preset = ocrModelPresets.find((option) => option.value === value)?.value
-    if (!ocrSettings.value || !preset || isSwitchingOcrModel.value) return
+    if (!ocrSettings.value || !preset || isSwitchingOcrModel.value || isSwitchingStructuredExtraction.value) return
     if (preset === ocrSettings.value.modelPreset) return
 
     const { notify } = useToast()
@@ -61,6 +62,21 @@ export const useOcrSettingsStore = defineStore('ocr-settings', () => {
       notify(error instanceof Error ? error.message : '切换模型失败，请重试。')
     } finally {
       isSwitchingOcrModel.value = false
+    }
+  }
+
+  async function switchStructuredExtraction(enabled: boolean): Promise<void> {
+    if (!ocrSettings.value || isSwitchingOcrModel.value || isSwitchingStructuredExtraction.value) return
+    const { notify } = useToast()
+    isSwitchingStructuredExtraction.value = true
+    try {
+      ocrSettings.value = await window.api.setStructuredExtraction(enabled)
+      ocrSettingsError.value = ''
+      notify(enabled ? '已启用本地结构化票据字段识别。' : '已关闭结构化票据字段识别。')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '切换结构化字段识别失败。')
+    } finally {
+      isSwitchingStructuredExtraction.value = false
     }
   }
 
@@ -80,10 +96,12 @@ export const useOcrSettingsStore = defineStore('ocr-settings', () => {
     ocrSettingsError,
     selectedOcrModel,
     isSwitchingOcrModel,
+    isSwitchingStructuredExtraction,
     currentOcrModel,
     initializeOcrSettings,
     refreshOcrSettings,
     switchOcrModel,
+    switchStructuredExtraction,
     openLocalFolder
   }
 })

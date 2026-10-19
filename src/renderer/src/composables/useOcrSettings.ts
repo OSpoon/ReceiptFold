@@ -8,6 +8,7 @@ type OcrSettingsApi = ReturnType<typeof storeToRefs<OcrSettingsStore>> & Pick<Oc
   | 'initializeOcrSettings'
   | 'refreshOcrSettings'
   | 'switchOcrModel'
+  | 'switchStructuredExtraction'
   | 'openLocalFolder'
 > & {
   ocrModelPresets: typeof ocrModelPresets
@@ -23,6 +24,7 @@ export function useOcrSettings(): OcrSettingsApi {
     initializeOcrSettings: store.initializeOcrSettings,
     refreshOcrSettings: store.refreshOcrSettings,
     switchOcrModel: store.switchOcrModel,
+    switchStructuredExtraction: store.switchStructuredExtraction,
     openLocalFolder: store.openLocalFolder
   }
 }

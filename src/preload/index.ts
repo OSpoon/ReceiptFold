@@ -36,7 +36,8 @@ const api: InvoiceApi = {
   getStorageInfo: () => ipcRenderer.invoke('invoice:storage-info'),
   openStorageFolder: (folder: StorageFolder) => ipcRenderer.invoke('storage:open-folder', folder),
   getOcrSettings: () => ipcRenderer.invoke('ocr:settings'),
-  setOcrModelPreset: (preset: OcrModelPreset) => ipcRenderer.invoke('ocr:model-set', preset)
+  setOcrModelPreset: (preset: OcrModelPreset) => ipcRenderer.invoke('ocr:model-set', preset),
+  setStructuredExtraction: (enabled: boolean) => ipcRenderer.invoke('ocr:structured-set', enabled)
 }
 
 contextBridge.exposeInMainWorld('api', api)

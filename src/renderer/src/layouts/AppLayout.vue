@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import InvoiceDetailSheet from '@/components/invoices/InvoiceDetailSheet.vue'
 import InvoiceExportDialog from '@/components/invoices/InvoiceExportDialog.vue'
 import InvoiceImportDialog from '@/components/invoices/InvoiceImportDialog.vue'
+import UpdateAvailableDialog from '@/components/app/UpdateAvailableDialog.vue'
 import ToastMessage from '@/components/app/ToastMessage.vue'
 import { useAppUpdates } from '@/composables/useAppUpdates'
 import { useInvoiceLibrary } from '@/composables/useInvoiceLibrary'
@@ -112,6 +113,7 @@ onUnmounted(() => {
     <InvoiceImportDialog />
     <InvoiceExportDialog />
     <InvoiceDetailSheet />
+    <UpdateAvailableDialog />
     <ToastMessage :message="toastMessage" />
   </div>
 </template>

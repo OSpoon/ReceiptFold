@@ -116,7 +116,7 @@ export interface Invoice {
 export type InvoicePatch = Pick<Invoice, 'invoiceNumber' | 'date' | 'seller' | 'buyer' | 'amount' | 'category' | 'note' | 'details'>
 
 export interface ImportProgress {
-  phase: 'prepare' | 'processing'
+  phase: 'prepare' | 'processing' | 'structuring' | 'structuring-downloading'
   current: number
   total: number
   fileName: string
@@ -136,6 +136,7 @@ export interface StorageInfo {
 
 export interface OcrSettings {
   modelPreset: OcrModelPreset
+  structuredExtractionEnabled: boolean
   modelStorageBytes: number
 }
 
@@ -144,12 +145,12 @@ export type StorageFolder = 'data' | 'models'
 export interface AppInfo {
   version: string
   packaged: boolean
+  updateMode: 'manual' | 'automatic'
   updateStatus: UpdateStatus
 }
 
 export type UpdateStatus =
   | { phase: 'idle' }
-  | { phase: 'manual-only' }
   | { phase: 'checking' }
   | { phase: 'available'; version: string }
   | { phase: 'not-available'; version: string }
@@ -175,4 +176,5 @@ export interface InvoiceApi {
   openStorageFolder: (folder: StorageFolder) => Promise<void>
   getOcrSettings: () => Promise<OcrSettings>
   setOcrModelPreset: (preset: OcrModelPreset) => Promise<OcrSettings>
+  setStructuredExtraction: (enabled: boolean) => Promise<OcrSettings>
 }

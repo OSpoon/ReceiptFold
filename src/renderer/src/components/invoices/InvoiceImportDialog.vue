@@ -34,13 +34,13 @@ const {
       <div v-if="isImporting" class="import-dialog-progress" aria-live="polite">
         <div class="import-progress-heading">
           <div>
-            <strong>{{ progress ? progress.phase === 'prepare' ? '正在准备识别模型' : '正在识别发票' : '正在准备导入' }}</strong>
+            <strong>{{ progress ? progress.phase === 'prepare' ? '正在准备识别模型' : progress.phase === 'structuring-downloading' ? '正在下载结构化模型' : progress.phase === 'structuring' ? '正在整理票据字段' : '正在识别发票' : '正在准备导入' }}</strong>
             <span>{{ progress?.fileName || '正在读取所选文件…' }}</span>
           </div>
           <b>{{ progressPercent }}%</b>
         </div>
         <div class="import-progress-track"><span :style="{ width: `${progressPercent}%` }"></span></div>
-        <div class="import-progress-meta"><span>已处理 {{ progress?.current ?? 0 }} / {{ progress?.total ?? '—' }} 张</span><span>识别在后台继续</span></div>
+        <div class="import-progress-meta"><span>已处理 {{ progress?.current ?? 0 }} / {{ progress?.total ?? '—' }} 张</span><span>{{ progress?.phase === 'structuring-downloading' ? '首次使用时下载，完成后复用本机缓存' : progress?.phase === 'structuring' ? '本地模型处理中' : '识别在后台继续' }}</span></div>
       </div>
 
       <div v-else>

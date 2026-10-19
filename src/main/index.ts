@@ -7,7 +7,10 @@ import { randomUUID } from 'node:crypto'
 import { extname, join } from 'node:path'
 import { emptyInvoiceDetails, emptyInvoiceParty, ocrModelPresets, type AppInfo, type ImportProgress, type Invoice, type InvoiceDetails, type InvoicePatch, type OcrModelPreset, type OcrSettings, type StorageInfo } from '../common/contracts'
 import { LocalInvoiceDatabase } from './invoice-database'
-import { parseOcr } from './invoice-parser'
+import { parseOcr, structuredInvoiceFieldDescriptions } from './invoice-parser'
+import type { StructuredInvoiceFields } from './invoice-parser'
+import { OcrWorkerClient } from './ocr-worker-client'
+import { StructuredFieldsWorkerClient } from './structured-fields-worker-client'
 import { checkForUpdates, checkForUpdatesOnStartup, getUpdateStatus, installDownloadedUpdate, setupUpdater } from './updater'
 
 const applicationName = '发票夹'
@@ -16,8 +19,17 @@ app.setPath('userData', join(app.getPath('appData'), 'receipt-fold'))
 
 const imageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tif', 'tiff']
 
-let ocrPromise: ReturnType<typeof createOcr> | null = null
+const ocrWorker = new OcrWorkerClient(join(__dirname, 'ocr-worker.js'))
+const runtimeExecutableName = process.platform === 'win32' ? 'node.exe' : 'node'
+const structuredFieldsWorkerPath = app.isPackaged
+  ? join(process.resourcesPath, 'app.asar.unpacked', 'out', 'main', 'structured-fields-worker.js')
+  : join(__dirname, 'structured-fields-worker.js')
+const standaloneNodePath = app.isPackaged
+  ? join(process.resourcesPath, 'node-runtime', runtimeExecutableName)
+  : join(app.getAppPath(), 'node_modules', 'node', 'bin', runtimeExecutableName)
+const structuredFieldsWorker = new StructuredFieldsWorkerClient(structuredFieldsWorkerPath, standaloneNodePath)
 let selectedOcrModelPreset: OcrModelPreset = 'small'
+let structuredExtractionEnabled = false
 let ocrSettingsLoaded = false
 let ocrModelSwitching = false
 let invoiceImportActive = false
@@ -85,8 +97,11 @@ async function loadOcrSettings(): Promise<void> {
   if (ocrSettingsLoaded) return
   try {
     const saved: unknown = JSON.parse(await readFile(ocrSettingsPath(), 'utf8'))
-    if (saved && typeof saved === 'object' && 'modelPreset' in saved && isOcrModelPreset(saved.modelPreset)) {
-      selectedOcrModelPreset = saved.modelPreset
+    if (saved && typeof saved === 'object') {
+      if ('modelPreset' in saved && isOcrModelPreset(saved.modelPreset)) selectedOcrModelPreset = saved.modelPreset
+      if ('structuredExtractionEnabled' in saved && typeof saved.structuredExtractionEnabled === 'boolean') {
+        structuredExtractionEnabled = saved.structuredExtractionEnabled
+      }
     }
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
@@ -118,14 +133,18 @@ async function getDirectorySize(directory: string): Promise<number> {
 
 async function getOcrSettings(): Promise<OcrSettings> {
   await loadOcrSettings()
-  return { modelPreset: selectedOcrModelPreset, modelStorageBytes: await getDirectorySize(ocrModelDirectory()) }
+  return {
+    modelPreset: selectedOcrModelPreset,
+    structuredExtractionEnabled,
+    modelStorageBytes: await getDirectorySize(ocrModelDirectory())
+  }
 }
 
-async function saveOcrModelPreset(preset: OcrModelPreset): Promise<void> {
+async function saveOcrSettings(): Promise<void> {
   await mkdir(dataDirectory(), { recursive: true })
   const target = ocrSettingsPath()
   const temporary = `${target}.tmp`
-  await writeFile(temporary, JSON.stringify({ modelPreset: preset }, null, 2), 'utf8')
+  await writeFile(temporary, JSON.stringify({ modelPreset: selectedOcrModelPreset, structuredExtractionEnabled }, null, 2), 'utf8')
   await rename(temporary, target)
 }
 
@@ -176,19 +195,6 @@ async function writeInvoices(invoices: Invoice[]): Promise<void> {
   await invoiceDatabase.replaceInvoices(invoices)
 }
 
-async function createOcr(): Promise<Awaited<ReturnType<typeof import('rapidocr-node').RapidOCR.create>>> {
-  const { RapidOCR } = await import('rapidocr-node')
-  await loadOcrSettings()
-  const model = { ocrVersion: 'PP-OCRv6', langType: 'ch', modelType: selectedOcrModelPreset } as const
-  return RapidOCR.create({
-    modelDirectory: ocrModelDirectory(),
-    detectionModel: model,
-    recognitionModel: model,
-    classifierModel: { ocrVersion: 'PP-OCRv4', langType: 'ch', modelType: 'mobile' },
-    executionProviders: ['cpu']
-  })
-}
-
 async function setOcrModelPreset(preset: unknown): Promise<OcrSettings> {
   await loadOcrSettings()
   if (!isOcrModelPreset(preset)) throw new TypeError('不支持的 OCR 模型规格。')
@@ -198,13 +204,40 @@ async function setOcrModelPreset(preset: unknown): Promise<OcrSettings> {
   ocrModelSwitching = true
   try {
     if (preset !== selectedOcrModelPreset) {
-      if (ocrPromise) {
-        const activeOcr = await ocrPromise
-        await activeOcr.close()
-        ocrPromise = null
-      }
-      await saveOcrModelPreset(preset)
+      await ocrWorker.closeOcr()
+      const previousPreset = selectedOcrModelPreset
       selectedOcrModelPreset = preset
+      try {
+        await saveOcrSettings()
+      } catch (error) {
+        selectedOcrModelPreset = previousPreset
+        throw error
+      }
+    }
+    return getOcrSettings()
+  } finally {
+    ocrModelSwitching = false
+  }
+}
+
+async function setStructuredExtraction(enabled: unknown): Promise<OcrSettings> {
+  await loadOcrSettings()
+  if (typeof enabled !== 'boolean') throw new TypeError('结构化字段识别设置无效。')
+  if (invoiceImportActive) throw new Error('发票导入完成后才能切换结构化字段识别。')
+  if (ocrModelSwitching) throw new Error('识别设置正在切换，请稍候。')
+
+  ocrModelSwitching = true
+  try {
+    if (enabled !== structuredExtractionEnabled) {
+      if (!enabled) await structuredFieldsWorker.close()
+      const previousValue = structuredExtractionEnabled
+      structuredExtractionEnabled = enabled
+      try {
+        await saveOcrSettings()
+      } catch (error) {
+        structuredExtractionEnabled = previousValue
+        throw error
+      }
     }
     return getOcrSettings()
   } finally {
@@ -225,16 +258,6 @@ async function readQrCode(imagePath: string): Promise<string> {
   } catch {
     return ''
   }
-}
-
-async function getOcr(): Promise<Awaited<ReturnType<typeof createOcr>>> {
-  if (!ocrPromise) {
-    ocrPromise = createOcr().catch((error) => {
-      ocrPromise = null
-      throw error
-    })
-  }
-  return ocrPromise
 }
 
 function mimeTypeFor(extension: string): string {
@@ -333,15 +356,32 @@ async function processInvoiceImport(window: BrowserWindow, sourcePaths?: string[
 
     try {
       notifyProgress(window, { phase: index === 0 ? 'prepare' : 'processing', current: index, total, fileName })
-      const ocr = await getOcr()
-      const result = await ocr.recognize(join(invoiceDirectory(), fileKey))
+      await loadOcrSettings()
+      const result = await ocrWorker.recognize({
+        imagePath: join(invoiceDirectory(), fileKey),
+        modelDirectory: ocrModelDirectory(),
+        modelPreset: selectedOcrModelPreset
+      })
       if (result.type === 'ocr') {
-        const ocrLines = result.lines.map((line) => ({
-          text: line.text,
-          confidence: line.confidence,
-          box: line.box.map((point) => ({ x: point.x, y: point.y })) as Invoice['ocrLines'][number]['box']
-        }))
-        Object.assign(invoice, parseOcr(result.txts, result.scores, ocrLines, await readQrCode(join(invoiceDirectory(), fileKey))))
+        const qrCodeText = await readQrCode(join(invoiceDirectory(), fileKey))
+        let structuredFields: StructuredInvoiceFields = {}
+        let structureError = false
+        if (structuredExtractionEnabled) {
+          notifyProgress(window, { phase: 'structuring', current: index, total, fileName })
+          try {
+            structuredFields = await structuredFieldsWorker.extract(
+              result.lines,
+              ocrModelDirectory(),
+              structuredInvoiceFieldDescriptions,
+              () => notifyProgress(window, { phase: 'structuring-downloading', current: index, total, fileName })
+            )
+          } catch (error) {
+            structureError = true
+            console.warn('本地结构化字段提取失败，将使用基础票面解析。', error)
+          }
+        }
+        Object.assign(invoice, parseOcr(result.txts, result.scores, result.lines, qrCodeText, structuredFields))
+        if (structureError) invoice.ocrError = '结构化字段模型暂不可用，已回退到基础票面解析。'
       }
       else {
         invoice.ocrStatus = 'done'
@@ -427,7 +467,12 @@ async function exportCsv(window: BrowserWindow): Promise<boolean> {
 }
 
 function registerHandlers(): void {
-  handleIpc('app:info', (): AppInfo => ({ version: app.getVersion(), packaged: app.isPackaged, updateStatus: getUpdateStatus() }))
+  handleIpc('app:info', (): AppInfo => ({
+    version: app.getVersion(),
+    packaged: app.isPackaged,
+    updateMode: process.platform === 'darwin' ? 'manual' : 'automatic',
+    updateStatus: getUpdateStatus()
+  }))
   handleIpc('app:update-check', () => checkForUpdates())
   handleIpc('app:update-install', () => installDownloadedUpdate())
   handleIpc('app:open-releases', () => shell.openExternal('https://github.com/OSpoon/ReceiptFold/releases/latest'))
@@ -509,6 +554,7 @@ function registerHandlers(): void {
   })
   handleIpc('ocr:settings', () => getOcrSettings())
   handleIpc('ocr:model-set', (_event, preset: unknown) => setOcrModelPreset(preset))
+  handleIpc('ocr:structured-set', (_event, enabled: unknown) => setStructuredExtraction(enabled))
 }
 
 function createWindow(): void {
@@ -579,11 +625,7 @@ app.on('before-quit', (event) => {
     } catch (error) {
       console.error('关闭本地发票数据库失败。', error)
     }
-    try {
-      if (ocrPromise) await (await ocrPromise).close()
-    } catch (error) {
-      console.error('关闭本地 OCR 模型失败。', error)
-    }
+    await Promise.all([ocrWorker.shutdown(), structuredFieldsWorker.shutdown()])
     shutdownComplete = true
     app.quit()
   })()
